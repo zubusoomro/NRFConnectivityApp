@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "982951439830",
+    "firebase_url": "https://nrf52bleapp.firebaseio.com",
+    "project_id": "nrf52bleapp",
+    "storage_bucket": "nrf52bleapp.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:982951439830:android:e24b61214e3f8675",
+        "android_client_info": {
+          "package_name": "com.zubu.soft.mobile.data.nrf52bleapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "982951439830-lhm3c9a7rj1651hko3mmbenf5l2m2b1e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zubu.soft.mobile.data.nrf52bleapp",
+            "certificate_hash": "55b737c3b947ae438c00f3f3dd93d1b9165923ba"
+          }
+        },
+        {
+          "client_id": "982951439830-74ocd0d8f8s7fghrbpvcq6sehc9bqjed.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPKdyxvcEf7LrQc4ZVxbYwvJNzu7hgEiA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "982951439830-74ocd0d8f8s7fghrbpvcq6sehc9bqjed.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

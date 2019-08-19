@@ -2,20 +2,17 @@ package com.zubu.soft.mobile.data.nrf52bleapp.Util;
 
 import android.os.Handler;
 import com.zubu.soft.mobile.data.nrf52bleapp.Interface.DeviceDeleteCallBack;
-import com.zubu.soft.mobile.data.nrf52bleapp.Services.BeaconStickyService;
 
 
 public class CustomRunnable implements Runnable {
-    private static final long mInterval = 5000;
+    private static final long mInterval = 10000;
     private Handler handler;
     private String key;
-    private BeaconStickyService advertiser;
     private DeviceDeleteCallBack callBack;
 
-    public CustomRunnable(String key, BeaconStickyService advertiser) {
+    public CustomRunnable(String key, Object advertiser) {
         this.key = key;
-        this.advertiser = advertiser;
-        callBack = advertiser;
+        callBack = (DeviceDeleteCallBack) advertiser;
     }
 
     @Override

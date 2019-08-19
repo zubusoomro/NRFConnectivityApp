@@ -3,12 +3,10 @@ package com.zubu.soft.mobile.data.nrf52bleapp.Activities
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.ScanResult
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
+import android.content.*
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
@@ -17,39 +15,72 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.zubu.soft.mobile.data.nrf52bleapp.Adapter.DevicesAdapter
+import com.zubu.soft.mobile.data.nrf52bleapp.Interface.DeviceClickListener
 import com.zubu.soft.mobile.data.nrf52bleapp.Models.AppContextProvider
 import com.zubu.soft.mobile.data.nrf52bleapp.Models.AppPreferences
-import com.zubu.soft.mobile.data.nrf52bleapp.Models.CustomModel
+import com.zubu.soft.mobile.data.nrf52bleapp.Models.SensorModel
 import com.zubu.soft.mobile.data.nrf52bleapp.R
-import com.zubu.soft.mobile.data.nrf52bleapp.Services.BeaconStickyService
-import com.zubu.soft.mobile.data.nrf52bleapp.Services.STOP_ACTION
+import com.zubu.soft.mobile.data.nrf52bleapp.Services.GattConnectionService
+import com.zubu.soft.mobile.data.nrf52bleapp.Services.ScanningService
 import com.zubu.soft.mobile.data.nrf52bleapp.Util.PermissionsHelper
 import kotlinx.android.synthetic.main.activity_main.*
 import org.jetbrains.anko.longToast
 import java.lang.ref.WeakReference
 import java.util.*
+import kotlin.collections.ArrayList
 
 private const val REQUEST_CODE_BLUETOOTH_ENABLE = 1
 
 class MainActivity : AppCompatActivity() {
     lateinit var adapter: DevicesAdapter
-    var scanService: BeaconStickyService? = null
+    var connectionService: GattConnectionService? = null
     var isBinded = false
-    private var localList = ArrayList<CustomModel>()
+    var scanningService: ScanningService? = null
+    var scanningFirstTime = true
+    private var localList = ArrayList<SensorModel>()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         init()
+        AppContextProvider.appContext = this@MainActivity
+        AppPreferences.createNotificationChannel(this@MainActivity)
     }
 
     private fun bindRunningService() {
-        if (BeaconStickyService.isServiceRunning) {
-            bindService(Intent(this, BeaconStickyService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
-            btn_Scan.text = "Stop Scanning"
-        } else {
-            btn_Scan.text = "Start Scanning"
-
+        if (GattConnectionService.isServiceRunning) {
+            bindService(Intent(this, GattConnectionService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
         }
+    }
+
+    private fun notifyAdapterForChange(data: MutableLiveData<ArrayList<SensorModel>>) {
+        data.observe(this, Observer { liveList ->
+            if (localList.size != 0) {
+                for (liveModel in liveList) {
+                    var exists = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
+                        localList.replaceAll {
+                            if (it == liveModel) liveModel
+                            else it
+                        }
+                    } else {
+                        for (localModel in localList) {
+                            if (localModel == liveModel) {
+                                exists = true
+                                localModel.updateModel(liveModel)
+                            } else {
+                                exists = false
+                            }
+                        }
+                        if (!exists)
+                            localList.add(liveModel)
+                    }
+                }
+            } else
+                localList.addAll(liveList)
+            adapter.notifyDataSetChanged()
+        })
+
     }
 
     private fun setAdapter(list: MutableLiveData<Map<String, ScanResult>>?) {
@@ -58,17 +89,24 @@ class MainActivity : AppCompatActivity() {
                 Observer<Map<String, ScanResult>> { serviceList ->
                     removeExtraDevices(serviceList)
                     for ((key, value) in serviceList) {
-                        val modl = CustomModel(key, value)
+                        val modl = SensorModel(key, value)
                         localList.add(modl)
                     }
                     localList.sortWith(Comparator { o1, o2 ->
-                        (o1.scanResult?.rssi!!).compareTo((o2.scanResult?.rssi!!))
+                        if (!o1.name.isNullOrEmpty()) {
+                            if (!o2.name.isNullOrEmpty()) {
+                                (o1.name!!).compareTo((o2.name!!))
+                            } else {
+                                //o2 empty or blank
+                                (o1.name!!).compareTo((""))
+                            }
+                        } else {
+                            //o1 empty or blank
+                            ("").compareTo((o2.name!!))
+                        }
                     })
                     adapter.notifyDataSetChanged()
                 })
-//            if (list?.value == null || list.value?.isEmpty()!!) {
-//                removeExtraDevices(null)
-//            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -77,30 +115,32 @@ class MainActivity : AppCompatActivity() {
     private fun removeExtraDevices(list: Map<String, ScanResult>?) {
         try {
             for ((index, customModels) in localList.withIndex()) {
-                if (customModels.gattConnection != null) continue
                 var found = false
-                if (list != null) {
-                    for ((key) in list) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            localList.removeIf {
-                                it.data.equals(key, true)
-                            }
-                        } else {
-                            if (!customModels.data.equals(key, true)) {
-                                found = false
+                if (!customModels.gattSet) {
+                    if (list != null) {
+                        for ((key) in list) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                localList.removeIf {
+                                    found = false
+                                    it.name.equals(key, true)
+                                }
                             } else {
-                                found = true
-                                break
+                                if (!customModels.name.equals(key, true)) {
+                                    found = false
+                                } else {
+                                    found = true
+                                    break
+                                }
                             }
-                        }
 
+                        }
+                    }
+                    if (!found) {
+                        localList.remove(customModels)
                     }
                 }
-                if (customModels.gattConnection == null && localList.size - 1 >= index && !found) {
-                    localList.removeAt(index)
-                }
             }
-        }catch (e: Exception){
+        } catch (e: Exception) {
             e.printStackTrace()
         }
     }
@@ -109,20 +149,18 @@ class MainActivity : AppCompatActivity() {
         rv_devices.layoutManager = LinearLayoutManager(this@MainActivity, RecyclerView.VERTICAL, false)
         adapter =
             DevicesAdapter(
-                WeakReference<Context>(this@MainActivity),
-                localList
+                WeakReference(this@MainActivity),
+                localList, listener
             )
         rv_devices.adapter = adapter
         btn_Scan.setOnClickListener {
 
-            if (BeaconStickyService.isServiceRunning) {
-                stopBeaconService()
+            if (ScanningService.isScanning) {
+                stopScanningService()
                 (it as Button).text = "Start Scanning"
-
+                scanningFirstTime = true
             } else {
-                AppContextProvider.appContext = this@MainActivity
-                AppPreferences.createNotificationChannel(this@MainActivity)
-                startBeaconService()
+                startScanningService()
                 (it as Button).text = "Stop Scanning"
             }
         }
@@ -130,6 +168,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        registerReceiver(mBluetoothReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         if (!isBinded)
             bindRunningService()
     }
@@ -137,6 +176,12 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         try {
+            if (ScanningService.isScanning) {
+                stopScanningService()
+
+            }
+            unregisterReceiver(mBluetoothReceiver)
+
             if (isBinded)
                 unbindService(serviceConnection)
         } catch (e: Exception) {
@@ -144,28 +189,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun stopBeaconService() {
-        try {
-            unbindService(serviceConnection)
-        } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+    override fun onDestroy() {
+        super.onDestroy()
+        scanningService?.onDestroy()
+    }
+
+    private val listener = object : DeviceClickListener {
+        override fun onDisconnect(deviceAddress: String) {
+            if (BluetoothAdapter.getDefaultAdapter().isEnabled) {
+                if (connectionService != null) {
+                    (connectionService as DeviceClickListener).onDisconnect(deviceAddress)
+                }
+            }
         }
-        Intent(this, BeaconStickyService::class.java).let {
-            it.action = STOP_ACTION
-            startService(it)
+
+        override fun onConnect(model: SensorModel) {
+            if (BluetoothAdapter.getDefaultAdapter().isEnabled) {
+                if (GattConnectionService.isServiceRunning) {
+                    if (connectionService != null) {
+                        (connectionService as DeviceClickListener).onConnect(model)
+                    }
+                } else {
+                    Intent(this@MainActivity, GattConnectionService::class.java).let {
+                        //                        it.putExtra("sensor_model", Parcels.wrap(model))
+                        bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
+                        startService(it)
+                    }
+                    Handler().postDelayed({
+                        onConnect(model)
+                    }, 500)
+                }
+            }
         }
 
     }
 
-    private fun startBeaconService() {
+    private fun stopScanningService() {
+        try {
+            scanningService?.stopScannig()
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun startScanningService() {
         if (PermissionsHelper.checkLocationPermission(this)) {
             if (PermissionsHelper.isBLEAvailable(this)) {
                 if (PermissionsHelper.isBluetoothEnabled()) {
-                    Intent(this, BeaconStickyService::class.java).let {
-                        bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
-                        startService(it)
+                    scanningService = ScanningService {
+                        if (scanningFirstTime) {
+                            setAdapter(scanningService?.getLiveDataDeviceList())
+                        }
+                        scanningFirstTime = false
                     }
-
+                    scanningService?.startScanning()
                 } else {
                     Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).also {
                         startActivityForResult(
@@ -180,10 +257,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val mBluetoothReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)) {
+                BluetoothAdapter.STATE_OFF -> {
+                    stopScanningService()
+                    btn_Scan.text = "Start Scan"
+                }
+                else -> {
+                }
+            }
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CODE_BLUETOOTH_ENABLE && resultCode == Activity.RESULT_OK) {
-            startBeaconService()
+            startScanningService()
         } else {
             longToast("Please turn on the bluetooth to continue")
         }
@@ -196,21 +286,35 @@ class MainActivity : AppCompatActivity() {
             permissions,
             grantResults
         ) {
-            startBeaconService()
+            startScanningService()
         }
     }
 
     private var serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(p0: ComponentName?, p1: IBinder?) {
-            val binder = p1 as BeaconStickyService.MyLocalBinder
-            setAdapter(p1.getScanList())
-            scanService = binder.getService()
+            val binder = p1 as GattConnectionService.MyLocalBinder
+            connectionService = binder.getService()
+            notifyAdapterForChange(binder.getData())
+            deleteDevice(binder.deleteDevice())
             isBinded = true
         }
 
         override fun onServiceDisconnected(p0: ComponentName?) {
             isBinded = false
+            connectionService = null
         }
 
     }
+
+    private fun deleteDevice(deleteDevice: MutableLiveData<SensorModel>) {
+        deleteDevice.observe(this, Observer {
+            for (model in localList) {
+                if (model == it) {
+                    localList.remove(model)
+                }
+            }
+        })
+    }
+
+
 }

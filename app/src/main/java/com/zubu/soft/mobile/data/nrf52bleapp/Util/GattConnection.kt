@@ -6,33 +6,34 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Handler
 import android.util.Log
-import com.zubu.soft.mobile.data.nrf52bleapp.Interface.GattConnectivityCallback
+import com.zubu.soft.mobile.data.nrf52bleapp.Interface.onModelChanged
+import com.zubu.soft.mobile.data.nrf52bleapp.Models.SensorModel
 import com.zubu.soft.mobile.data.nrf52bleapp.Models.UUIDS
 import java.lang.ref.WeakReference
-import java.util.*
-import kotlin.collections.ArrayList
+import java.nio.ByteBuffer
 
 
-class GattConnection {
+class GattConnection(
+    var mContext: WeakReference<Context>, var model: SensorModel, var listener: onModelChanged
+) {
     private var mBluetoothAdapter: BluetoothAdapter? = null
-    var context: WeakReference<Context>? = null
-    var mdeviceAddress: String? = null
-    var mListener: GattConnectivityCallback? = null
-    private val descriptorUUIDsList: ArrayList<UUID> = ArrayList()
-    private val characteristicUUIDsList: ArrayList<UUID> = ArrayList()
-    private val serviceUUIDsList: ArrayList<UUID> = ArrayList()
-    private var dataString = ArrayList<String>()
     val TAG = "GATT CONNECTION"
     private var mGattCallback: BluetoothGattCallback? = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 Log.i(TAG, "GATT CONNECTED")
+                model.gattSetError = false
 
                 gatt?.discoverServices()
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 Log.i(TAG, "GATT disconnected")
+                model.gattSetError = true
+                model.statusCode = status
+                listener.modelChanged(model)
             }
+
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
@@ -52,26 +53,49 @@ class GattConnection {
                             connected = it.writeDescriptor(this)
                         }
                         if (connected) {
-                            val characteristic0x02 =
-                                it.getService(UUIDS.SERVICE_UUID)?.getCharacteristic(
-                                    UUIDS.CHARACTERISTIC_UUID1
-                                )
-                            characteristic0x02?.value = "ABCD".toByteArray(Charsets.UTF_8)
-                            it.writeCharacteristic(characteristic0x02)
+                            model.gattSet = true
+                            model.gattSetError = false
+                            listener.modelChanged(model)
+                        } else {
+                            model.gattSet = false
+                            model.gattSetError = true
+                            model.statusCode = status
+                            listener.modelChanged(model)
                         }
                     }
                 }
-                mListener?.onConnected(connected)
             }
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
             if (UUIDS.DESCRIPTOR_CONFIG_UUID == descriptor?.uuid) {
-                val characteristic = gatt
-                    ?.getService(UUIDS.SERVICE_UUID)
-                    ?.getCharacteristic(UUIDS.CHARACTERISTIC_UUID2)
-                gatt?.readCharacteristic(characteristic)
+
+                gatt?.let {
+                    val characteristic0x02 =
+                        it.getService(UUIDS.SERVICE_UUID)?.getCharacteristic(
+                            UUIDS.CHARACTERISTIC_UUID1
+                        )
+                    characteristic0x02?.setValue("?")
+                    var wrote = it.writeCharacteristic(characteristic0x02)
+                    if (wrote) {
+                        model.gattSet = true
+                        model.gattSetError = false
+                        listener.modelChanged(model)
+                    }
+                }
             }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            val data = gatt
+                ?.getService(UUIDS.SERVICE_UUID)
+                ?.getCharacteristic(UUIDS.CHARACTERISTIC_UUID2)
+            gatt?.readCharacteristic(data)
+
         }
 
         override fun onCharacteristicRead(
@@ -91,21 +115,34 @@ class GattConnection {
     private fun readData(characteristic: BluetoothGattCharacteristic?) {
         val data = characteristic?.value
         data?.let {
-            dataString.add(String(it))
-            mListener?.onReadData(data = String(it))
+            var fNumber = ByteBuffer.wrap(it).float
+            model.sensorData = fNumber.toString()
+            listener.modelChanged(model)
+            initTimer(fNumber)
         }
+    }
+
+    private fun initTimer(fNumber: Float) {
+        var timer: Int = when {
+            fNumber < 100 -> 10
+            fNumber in 100.0..32000.0 -> 20
+            fNumber > 32000 -> 30
+            else -> 10
+        }
+        Handler().postDelayed({
+            val characteristic0x02 =
+                gattConn?.getService(UUIDS.SERVICE_UUID)?.getCharacteristic(
+                    UUIDS.CHARACTERISTIC_UUID1
+                )
+            characteristic0x02?.setValue("?")
+            gattConn?.writeCharacteristic(characteristic0x02)
+        }, (timer * 60000).toLong())
     }
 
     private var gattConn: BluetoothGatt? = null
 
-    private fun getBleDevice(): BluetoothDevice? {
-        return BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(mdeviceAddress)
-    }
 
-    fun onCreate(mContext: WeakReference<Context>, deviceAddress: String, gallCallback: GattConnectivityCallback) {
-        context = mContext
-        mdeviceAddress = deviceAddress
-        mListener = gallCallback
+    fun onCreate() {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (!checkBluetoothSupport(mBluetoothAdapter)) {
             throw RuntimeException("GATT client requires Bluetooth support")
@@ -121,21 +158,23 @@ class GattConnection {
             Log.i(TAG, "Bluetooth enabled... starting client")
             startClient()
         }
+
     }
 
     fun onDestroy() {
         try {
             mGattCallback = null
-            mListener?.onConnected(false)
-            mListener?.onReadData("")
-            mListener = null
 
             val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
             if (bluetoothAdapter.isEnabled) {
                 stopClient()
             }
 
-            context?.get()?.unregisterReceiver(mBluetoothReceiver)
+            mContext.get()?.unregisterReceiver(mBluetoothReceiver)
+            model.gattSet = false
+            model.sensorData = ""
+            model.gattSetError = false
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -153,9 +192,13 @@ class GattConnection {
         }
     }
 
+    private fun getDeviceAddress(): String {
+        return model.scanResult?.device!!.address
+    }
+
     private fun startClient() {
-        val bluetoothDevice = mBluetoothAdapter?.getRemoteDevice(mdeviceAddress)
-        gattConn = bluetoothDevice?.connectGatt(context?.get(), false, mGattCallback)
+        val bluetoothDevice = mBluetoothAdapter?.getRemoteDevice(getDeviceAddress())
+        gattConn = bluetoothDevice?.connectGatt(mContext.get(), false, mGattCallback)
 
         if (gattConn == null) {
             Log.w(TAG, "Unable to create GATT client")
@@ -170,7 +213,7 @@ class GattConnection {
             return false
         }
 
-        if (!context?.get()?.packageManager?.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)!!) {
+        if (!mContext.get()?.packageManager?.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)!!) {
             Log.w(TAG, "Bluetooth LE is not supported")
             return false
         }
