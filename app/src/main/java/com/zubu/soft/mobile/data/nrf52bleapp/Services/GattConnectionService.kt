@@ -128,5 +128,3 @@ class GattConnectionService : Service(), DeviceClickListener, onModelChanged {
         }
     }
 }
-
-const val STOP_ACTION = "stop_service"

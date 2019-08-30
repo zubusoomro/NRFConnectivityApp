@@ -114,7 +114,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun removeExtraDevices(list: Map<String, ScanResult>?) {
         try {
-            for ((index, customModels) in localList.withIndex()) {
+            for (customModels in localList) {
                 var found = false
                 if (!customModels.gattSet) {
                     if (list != null) {
@@ -283,7 +283,6 @@ class MainActivity : AppCompatActivity() {
         PermissionsHelper.onRequestPermissionsResult(
             this,
             requestCode,
-            permissions,
             grantResults
         ) {
             startScanningService()

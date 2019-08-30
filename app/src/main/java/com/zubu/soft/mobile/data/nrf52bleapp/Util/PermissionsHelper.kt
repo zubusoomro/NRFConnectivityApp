@@ -66,7 +66,6 @@ object PermissionsHelper {
     fun onRequestPermissionsResult(
         activity: Activity,
         requestCode: Int,
-        permissions: Array<String>,
         grantResults: IntArray,
         onPermissionSettled: () -> Unit
     ) {
