@@ -59,14 +59,28 @@ class GattConnectionService : Service(), DeviceClickListener, onModelChanged {
         startDataListening(model)
     }
 
+    @Synchronized
     override fun onDisconnect(deviceAddress: String) {
-        for (model in list)
-            if (model.getSensorAddress() == deviceAddress) {
-                model.gattConnection?.onDestroy()
-                liveDataModel.postValue(model)
-                list.remove(model)
-            }
-        liveDataDeviceList.postValue(list)
+        var iterator = list.iterator()
+        if (iterator.hasNext()) {
+            do {
+                var model = iterator.next()
+                if (model.getSensorAddress() == deviceAddress) {
+                    model.gattConnection?.onDestroy()
+                    liveDataModel.postValue(model)
+                    list.remove(model)
+                    break
+                }
+            } while (iterator.hasNext())
+            liveDataDeviceList.postValue(list)
+        }
+//        for (model in list)
+//            if (model.getSensorAddress() == deviceAddress) {
+//                model.gattConnection?.onDestroy()
+//                liveDataModel.postValue(model)
+//                list.remove(model)
+//            }
+//        liveDataDeviceList.postValue(list)
     }
 
     override fun modelChanged(model: SensorModel) {

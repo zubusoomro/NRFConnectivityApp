@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/NRFConnectivityApp.iml" filepath="$PROJECT_DIR$/NRFConnectivityApp.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/NRFConnectivityApp-app.iml" filepath="$PROJECT_DIR$/app/NRFConnectivityApp-app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Own_Projects-NRFConnectivityApp.iml" filepath="$PROJECT_DIR$/Own_Projects-NRFConnectivityApp.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
   </component>

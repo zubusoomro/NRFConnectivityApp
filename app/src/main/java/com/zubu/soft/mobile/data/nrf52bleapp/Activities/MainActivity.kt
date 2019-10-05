@@ -48,37 +48,49 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindRunningService() {
         if (GattConnectionService.isServiceRunning) {
-            bindService(Intent(this, GattConnectionService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
+            bindService(
+                Intent(this, GattConnectionService::class.java),
+                serviceConnection,
+                Context.BIND_AUTO_CREATE
+            )
         }
     }
 
+    @Synchronized
     private fun notifyAdapterForChange(data: MutableLiveData<ArrayList<SensorModel>>) {
         data.observe(this, Observer { liveList ->
-            if (localList.size != 0) {
-                for (liveModel in liveList) {
-                    var exists = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-
-                        localList.replaceAll {
-                            if (it == liveModel) liveModel
-                            else it
-                        }
-                    } else {
-                        for (localModel in localList) {
-                            if (localModel == liveModel) {
-                                exists = true
-                                localModel.updateModel(liveModel)
+            try {
+                if (localList.size != 0) {
+                    var iterator = liveList.iterator()
+                    if (iterator.hasNext()) {
+                        do {
+                            val liveModel = iterator.next()
+                            var exists = false
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                localList.replaceAll {
+                                    if (it == liveModel) liveModel
+                                    else it
+                                }
                             } else {
-                                exists = false
+                                for (localModel in localList) {
+                                    if (localModel == liveModel) {
+                                        exists = true
+                                        localModel.updateModel(liveModel)
+                                    } else {
+                                        exists = false
+                                    }
+                                }
+                                if (!exists)
+                                    localList.add(liveModel)
                             }
-                        }
-                        if (!exists)
-                            localList.add(liveModel)
+                        } while (iterator.hasNext())
                     }
-                }
-            } else
-                localList.addAll(liveList)
-            adapter.notifyDataSetChanged()
+                } else
+                    localList.addAll(liveList)
+                adapter.notifyDataSetChanged()
+            } catch (e: java.lang.Exception) {
+                e.printStackTrace()
+            }
         })
 
     }
@@ -146,7 +158,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun init() {
-        rv_devices.layoutManager = LinearLayoutManager(this@MainActivity, RecyclerView.VERTICAL, false)
+        rv_devices.layoutManager =
+            LinearLayoutManager(this@MainActivity, RecyclerView.VERTICAL, false)
         adapter =
             DevicesAdapter(
                 WeakReference(this@MainActivity),
@@ -211,7 +224,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     Intent(this@MainActivity, GattConnectionService::class.java).let {
-                        //                        it.putExtra("sensor_model", Parcels.wrap(model))
                         bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
                         startService(it)
                     }
@@ -279,7 +291,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         PermissionsHelper.onRequestPermissionsResult(
             this,
             requestCode,
@@ -307,11 +323,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun deleteDevice(deleteDevice: MutableLiveData<SensorModel>) {
         deleteDevice.observe(this, Observer {
-            for (model in localList) {
-                if (model == it) {
-                    localList.remove(model)
-                }
+            val iterator = localList.iterator()
+            if (iterator.hasNext()) {
+                do {
+                    if (iterator.next() == it) {
+                        iterator.remove()
+                    }
+                } while (iterator.hasNext())
             }
+//            for (model in localList) {
+//                if (model == it) {
+//                    localList.remove(model)
+//                }
+//            }
         })
     }
 

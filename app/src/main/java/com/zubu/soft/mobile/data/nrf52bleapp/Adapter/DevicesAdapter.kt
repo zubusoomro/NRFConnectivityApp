@@ -43,7 +43,7 @@ class DevicesAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         try {
             holder.apply {
-                list[position].let { model ->
+                list[adapterPosition].let { model ->
                     model.scanResult?.let {
                         var data = ""
 
@@ -81,50 +81,13 @@ class DevicesAdapter(
                 connectBtn.setOnClickListener {
                     if (connectBtn.text == mContext.get()?.getString(R.string.text_connect)) {
                         connectBtn.text = mContext.get()?.getString(R.string.text_connecting)
-                        list[position].gattSet = true
-                        listener.onConnect(list[position])
-//                            .apply {
-//                            if (this) {
-//                                connectBtn.text = mContext.get()?.getString(R.string.text_disconnect)
-//                            } else {
-//                                connectBtn.text = mContext.get()?.getString(R.string.text_connect)
-//                            }
-//                            tvConnected.text = "Device Connected: $this"
-//                        }
-//                        list[position].gattConnection = GattConnection().onCreate(
-////                            mContext,
-////                            list[position].scanResult?.device?.address!!,
-////                            object : GattConnectivityCallback {
-////                                override fun onConnected(success: Boolean) {
-////                                    mContext.get()?.runOnUiThread {
-////
-////                                    }
-////                                }
-////
-////                                override fun onReadData(data: String) {
-////                                    mContext.get()?.runOnUiThread {
-////                                        if (data.isNotEmpty()) {
-////                                            llData.visibility = View.VISIBLE
-////                                            tvData.text = "Data: $data"
-////                                            list[position].sensorData = data
-////                                        } else {
-////                                            llData.visibility = View.GONE
-////                                        }
-////                                    }
-////                                }
-////
-////                            })
+                        list[adapterPosition].gattSet = true
+                        listener.onConnect(list[adapterPosition])
                     } else {
                         connectBtn.text = mContext.get()?.getString(R.string.text_disconnecting)
-                        list[position].getSensorAddress().let { it1 -> listener.onDisconnect(it1) }
-//                        var gatt = list[position]
-//                        gatt.let {
-//                            it.gattConnection?.onDestroy()
-//                            it.gattConnection = null
-//                            it.gattSet = false
-//
-//                        }
-//                        notifyDataSetChanged()
+                        list[adapterPosition].getSensorAddress().let { it1 ->
+                            listener.onDisconnect(it1)
+                        }
                     }
                 }
 

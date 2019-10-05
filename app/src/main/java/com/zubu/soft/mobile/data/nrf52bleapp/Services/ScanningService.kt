@@ -51,7 +51,7 @@ class ScanningService(var function: () -> Unit) : DeviceDeleteCallBack {
 
     private fun getScanFilter(): List<ScanFilter> {
         var filter = ArrayList<ScanFilter>()
-        filter.add(ScanFilter.Builder().setServiceUuid(ParcelUuid(UUIDS.SERVICE_UUID)).build())
+//        filter.add(ScanFilter.Builder().setServiceUuid(ParcelUuid(UUIDS.SERVICE_UUID)).build())
         return filter
     }
 
